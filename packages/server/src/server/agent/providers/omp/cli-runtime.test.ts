@@ -92,9 +92,7 @@ function replyToCommands(
     }
   });
 }
-type CommandOutcome =
-  | { ok: true; data: unknown }
-  | { ok: false; error: string; code?: string };
+type CommandOutcome = { ok: true; data: unknown } | { ok: false; error: string; code?: string };
 
 function replyCommandOutcomes(
   child: OmpChild,
@@ -117,7 +115,11 @@ function replyCommandOutcomes(
           command: command.type,
           ...(outcome.ok
             ? { success: true, data: outcome.data }
-            : { success: false, error: outcome.error, ...(outcome.code ? { code: outcome.code } : {}) }),
+            : {
+                success: false,
+                error: outcome.error,
+                ...(outcome.code ? { code: outcome.code } : {}),
+              }),
         })}\n`,
       );
     }
@@ -547,6 +549,29 @@ describe("OMP CLI runtime", () => {
     const session = await createRuntime(child).startSession({ cwd: "/workspace/project" });
 
     await expect(session.getMessages()).rejects.toThrow("boom");
+    await session.close();
+  });
+
+  test("pins the session to legacy via pagingUnsupported after a page failure", async () => {
+    const child = createOmpChild({ supportedProtocolVersions: [1, 2] });
+    const seen: string[] = [];
+    replyCommandOutcomes(child, (command) => {
+      seen.push(command.type as string);
+      if (command.type === "negotiate_protocol") return { ok: true, data: { protocolVersion: 2 } };
+      if (command.type === "get_messages_page") {
+        return { ok: false, error: "unknown command" };
+      }
+      if (command.type === "get_messages") {
+        return { ok: true, data: { messages: [{ role: "user", content: "fallback" }] } };
+      }
+      return { ok: false, error: `unexpected command ${String(command.type)}` };
+    });
+    const session = await createRuntime(child).startSession({ cwd: "/workspace/project" });
+
+    await expect(session.getMessages()).rejects.toThrow("unknown command");
+    await expect(session.getMessages()).resolves.toEqual([{ role: "user", content: "fallback" }]);
+    expect(seen.filter((type) => type === "get_messages_page")).toHaveLength(1);
+    expect(seen.filter((type) => type === "get_messages")).toHaveLength(1);
     await session.close();
   });
 });

@@ -478,6 +478,14 @@ export class OmpHarness {
     return this.omp.latestSession();
   }
 
+  agentSession() {
+    return this.requireSession();
+  }
+
+  steerRequests() {
+    return this.omp.latestSession().steerRequests;
+  }
+
   runningToolCallIds(): string[] {
     const statusByCall = new Map<string, string>();
     for (const item of this.timeline()) {

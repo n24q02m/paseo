@@ -574,4 +574,20 @@ describe("OMP CLI runtime", () => {
     expect(seen.filter((type) => type === "get_messages")).toHaveLength(1);
     await session.close();
   });
+
+  test("sends native set_fast_mode RPC and parses enabled versus active", async () => {
+    const child = createOmpChild();
+    const commands: Record<string, unknown>[] = [];
+    replyToCommands(child, (command) => {
+      commands.push(command);
+      return { enabled: true, active: false };
+    });
+    const session = await createRuntime(child).startSession({ cwd: "/workspace/project" });
+
+    await expect(session.setFastMode(true)).resolves.toEqual({
+      enabled: true,
+      active: false,
+    });
+    expect(commands.map(withoutRequestId)).toEqual([{ type: "set_fast_mode", enabled: true }]);
+  });
 });

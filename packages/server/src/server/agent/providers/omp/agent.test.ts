@@ -124,12 +124,7 @@ function createFastModeHarness(version = "18.1.14"): OmpHarness {
     runtimeSettings: {
       command: {
         mode: "replace",
-        argv: [
-          process.execPath,
-          "-e",
-          `process.stdout.write(${versionOutput})`,
-          "--",
-        ],
+        argv: [process.execPath, "-e", `process.stdout.write(${versionOutput})`, "--"],
       },
     },
   });
@@ -682,15 +677,11 @@ describe("OMP agent client and session", () => {
     const omp = createFastModeHarness();
     await omp.start({ model: "openai-codex/gpt-5.6-luna" });
 
-    expect(omp.features()).toMatchObject([
-      { type: "toggle", id: "fast_mode", value: false },
-    ]);
-    await expect(
-      omp.clientFeatures({ model: "openai-codex/gpt-5.6-luna" }),
-    ).resolves.toMatchObject([{ id: "fast_mode", value: false }]);
-    await expect(
-      omp.clientFeatures({ model: "anthropic/claude-sonnet-4" }),
-    ).resolves.toEqual([]);
+    expect(omp.features()).toMatchObject([{ type: "toggle", id: "fast_mode", value: false }]);
+    await expect(omp.clientFeatures({ model: "openai-codex/gpt-5.6-luna" })).resolves.toMatchObject(
+      [{ id: "fast_mode", value: false }],
+    );
+    await expect(omp.clientFeatures({ model: "anthropic/claude-sonnet-4" })).resolves.toEqual([]);
   });
 
   test("applies Fast through native RPC and preserves enabled versus active", async () => {
@@ -784,12 +775,8 @@ describe("OMP agent client and session", () => {
     const omp = createFastModeHarness();
     await omp.start({ model: "openai-codex/gpt-5.6-luna" });
 
-    await expect(omp.setFeature("fast_mode", "true")).rejects.toThrow(
-      "requires a boolean",
-    );
-    await expect(omp.setFeature("unknown", true)).rejects.toThrow(
-      "Unknown OMP feature",
-    );
+    await expect(omp.setFeature("fast_mode", "true")).rejects.toThrow("requires a boolean");
+    await expect(omp.setFeature("unknown", true)).rejects.toThrow("Unknown OMP feature");
     expect(omp.runtime().setFastModeRequests).toEqual([]);
   });
 
@@ -829,9 +816,7 @@ describe("OMP agent client and session", () => {
     });
 
     expect(omp.features()).toEqual([]);
-    await expect(omp.setFeature("fast_mode", true)).rejects.toThrow(
-      "not available",
-    );
+    await expect(omp.setFeature("fast_mode", true)).rejects.toThrow("not available");
     expect(omp.eventTypes()).toContain("model_changed");
   });
 

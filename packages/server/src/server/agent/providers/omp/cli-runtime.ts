@@ -164,9 +164,7 @@ class OmpCliRuntimeSession implements OmpRuntimeSession {
   }
 
   async setFastMode(enabled: boolean) {
-    return OmpFastModeResultSchema.parse(
-      await this.request({ type: "set_fast_mode", enabled }),
-    );
+    return OmpFastModeResultSchema.parse(await this.request({ type: "set_fast_mode", enabled }));
   }
 
   async getMessages(): Promise<OmpAgentMessage[]> {

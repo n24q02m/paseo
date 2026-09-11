@@ -111,7 +111,10 @@ import {
   mapOmpRpcUiPermissionRequest,
 } from "./rpc-ui-permission-mapper.js";
 import { DEFAULT_OMP_THINKING_LEVEL, mapOmpModel } from "./map-omp-model.js";
-import { CODEX_FAST_MODE_FEATURE, codexModelSupportsFastMode } from "../codex-feature-definitions.js";
+import {
+  CODEX_FAST_MODE_FEATURE,
+  codexModelSupportsFastMode,
+} from "../codex-feature-definitions.js";
 
 const OMP_PROVIDER = "omp";
 const QUESTION_RESPONSE_HEADER = "Response";
@@ -131,7 +134,6 @@ const OMP_CORE_CAPABILITIES: AgentCapabilityFlags = {
   supportsRewindFiles: false,
   supportsRewindBoth: false,
 };
-
 
 export interface OmpAgentClientOptions {
   logger: Logger;
@@ -1782,7 +1784,6 @@ export class OmpAgentSession implements AgentSession {
     }
   }
 
-
   private handleExtraRuntimeEvent(event: OmpRuntimeEvent): boolean {
     if (
       handleOmpHostToolRuntimeEvent(event, {
@@ -2483,8 +2484,7 @@ export class OmpAgentClient implements AgentClient {
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
       const reportedState = await runtimeSession.getState();
-      const effectiveModel =
-        modelToId(reportedState.model) ?? resumeConfig.config.model ?? null;
+      const effectiveModel = modelToId(reportedState.model) ?? resumeConfig.config.model ?? null;
       const configuredFastMode = resumeConfig.config.featureValues?.fast_mode;
       const nativeFastModeSupported = await this.supportsNativeFastMode();
       let fastModeApplied = false;

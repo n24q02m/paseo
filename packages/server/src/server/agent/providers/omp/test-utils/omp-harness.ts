@@ -21,11 +21,7 @@ import {
   type OmpProviderIdleScheduler,
 } from "../agent.js";
 import type { OmpUsagePollScheduler } from "../usage-poller.js";
-import type {
-  OmpAgentMessage,
-  OmpRpcSlashCommand,
-  OmpSessionState,
-} from "../rpc-types.js";
+import type { OmpAgentMessage, OmpRpcSlashCommand, OmpSessionState } from "../rpc-types.js";
 import { FakeOmp } from "./fake-omp.js";
 
 const CWD = "/tmp/paseo-omp-agent-test";

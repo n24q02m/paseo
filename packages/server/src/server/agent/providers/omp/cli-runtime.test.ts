@@ -432,8 +432,6 @@ describe("OMP CLI runtime", () => {
       enabled: true,
       active: false,
     });
-    expect(commands.map(withoutRequestId)).toEqual([
-      { type: "set_fast_mode", enabled: true },
-    ]);
+    expect(commands.map(withoutRequestId)).toEqual([{ type: "set_fast_mode", enabled: true }]);
   });
 });

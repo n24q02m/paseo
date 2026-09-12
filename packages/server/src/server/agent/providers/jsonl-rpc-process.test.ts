@@ -194,7 +194,6 @@ describe("JsonlRpcProcess", () => {
     );
   });
 
-
   test("null timeout waits past short wall-clock limits until the response arrives", async () => {
     const transport = startProcess();
 

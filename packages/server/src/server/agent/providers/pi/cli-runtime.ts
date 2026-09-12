@@ -149,11 +149,9 @@ class PiCliRuntimeSession implements PiRuntimeSession {
   }
 
   async abort(): Promise<void> {
-    await this.process.request(
-      { type: "abort" },
-      JSONL_RPC_ABORT_TIMEOUT_MS,
-      { closeOnTimeout: true },
-    );
+    await this.process.request({ type: "abort" }, JSONL_RPC_ABORT_TIMEOUT_MS, {
+      closeOnTimeout: true,
+    });
   }
 
   async getState(): Promise<PiSessionState> {

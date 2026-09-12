@@ -100,11 +100,7 @@ export class AgentRunState {
     ) {
       return;
     }
-    if (
-      run.kind === "autonomous" &&
-      run.turnId !== null &&
-      run.turnId !== turnId
-    ) {
+    if (run.kind === "autonomous" && run.turnId !== null && run.turnId !== turnId) {
       return;
     }
 

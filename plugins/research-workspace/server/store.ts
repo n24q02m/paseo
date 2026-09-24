@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 import {
   addEdgeRpc,
@@ -27,12 +31,72 @@ function blankState(input?: unknown): ResearchWorkspaceState {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Persistence: write-through JSON, one file per workspace.
+// ---------------------------------------------------------------------------
+// The host does not expose a plugin data dir yet, so state lands in a
+// deterministic folder (override with RESEARCH_WORKSPACE_DATA_DIR for tests
+// and self-hosted layouts). Files are tiny; sync IO keeps handlers atomic on
+// the single-threaded host. A missing or corrupt file degrades to a blank
+// state - persistence must never break an RPC handler.
+
+const FILE_VERSION = 1;
+const warnedFiles = new Set<string>();
+
+function dataDir(): string {
+  return (
+    process.env.RESEARCH_WORKSPACE_DATA_DIR ??
+    join(homedir(), ".paseo", "plugins", "research-workspace")
+  );
+}
+
+/** Test-visible path derivation: sanitized id + short content-independent hash. */
+export function stateFilePathFor(workspaceId: string): string {
+  const safe = workspaceId.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+  const hash = createHash("sha256").update(workspaceId).digest("hex").slice(0, 8);
+  return join(dataDir(), `${safe}-${hash}.json`);
+}
+
+function loadState(workspaceId: string): ResearchWorkspaceState {
+  const file = stateFilePathFor(workspaceId);
+  let raw: string;
+  try {
+    raw = readFileSync(file, "utf8");
+  } catch {
+    return blankState();
+  }
+  try {
+    const envelope = JSON.parse(raw) as { version?: number; state?: unknown };
+    if (envelope.version !== FILE_VERSION)
+      throw new Error(`unsupported version ${envelope.version}`);
+    return blankState(envelope.state);
+  } catch (error) {
+    if (!warnedFiles.has(file)) {
+      warnedFiles.add(file);
+      console.warn(`[research-workspace] ignoring unreadable state file ${file}: ${String(error)}`);
+    }
+    return blankState();
+  }
+}
+
+function saveState(workspaceId: string, state: ResearchWorkspaceState): void {
+  const file = stateFilePathFor(workspaceId);
+  const tmp = `${file}.${process.pid}.tmp`;
+  try {
+    mkdirSync(dataDir(), { recursive: true });
+    writeFileSync(tmp, JSON.stringify({ version: FILE_VERSION, state }));
+    renameSync(tmp, file);
+  } catch (error) {
+    console.warn(`[research-workspace] failed to persist ${file}: ${String(error)}`);
+  }
+}
+
 export function getState(input: GetStateInput): RpcOutput<typeof getStateRpc> {
   const existing = states.get(input.workspaceId);
   if (existing) return existing;
-  const fresh = blankState();
-  states.set(input.workspaceId, fresh);
-  return fresh;
+  const loaded = loadState(input.workspaceId);
+  states.set(input.workspaceId, loaded);
+  return loaded;
 }
 
 let counter = 0;
@@ -51,6 +115,7 @@ export function upsertNode(input: UpsertNodeInput) {
     found.detail = input.node.detail;
     found.status = input.node.status;
     found.updatedAt = now;
+    saveState(input.workspaceId, state);
     return found;
   }
   const created = {
@@ -63,6 +128,7 @@ export function upsertNode(input: UpsertNodeInput) {
     updatedAt: input.node.updatedAt ?? now,
   };
   state.nodes.push(created);
+  saveState(input.workspaceId, state);
   return created;
 }
 
@@ -73,6 +139,7 @@ export function removeNode(input: RpcInput<typeof removeNodeRpc>) {
   state.edges = state.edges.filter(
     (edge) => edge.fromId !== input.nodeId && edge.toId !== input.nodeId,
   );
+  saveState(input.workspaceId, state);
   return { removedNodeId: input.nodeId, removedEdges: before - state.edges.length };
 }
 
@@ -99,6 +166,7 @@ export function addEdge(input: AddEdgeInput): ResearchEdge {
       kind: input.edge.kind,
     };
     state.edges.push(created);
+    saveState(input.workspaceId, state);
     return created;
   }
   const fallback = state.edges.find(
@@ -111,6 +179,7 @@ export function addEdge(input: AddEdgeInput): ResearchEdge {
 export function removeEdge(input: RpcInput<typeof removeEdgeRpc>) {
   const state = getState({ workspaceId: input.workspaceId });
   state.edges = state.edges.filter((edge) => edge.id !== input.edgeId);
+  saveState(input.workspaceId, state);
   return { removedEdgeId: input.edgeId };
 }
 
@@ -128,11 +197,13 @@ export function recordDecision(input: RecordDecisionInput) {
   state.decisions.push(created);
   // Newest-first for the log panel.
   state.decisions.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  saveState(input.workspaceId, state);
   return created;
 }
 
 /** Test-only reset hook: clears in-memory state between suites. */
 export function __resetForTests(): void {
   states.clear();
+  warnedFiles.clear();
   counter = 0;
 }

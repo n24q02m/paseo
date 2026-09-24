@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { workspaceStateSchema } from "../shared/state";
 import {
   __resetForTests,
@@ -7,8 +10,25 @@ import {
   recordDecision,
   removeEdge,
   removeNode,
+  stateFilePathFor,
   upsertNode,
 } from "./store";
+
+// File-level isolation: every suite (including the in-memory ones, which now
+// write through to disk) runs against a throwaway data dir - never the real
+// ~/.paseo tree.
+let dataDir: string;
+
+beforeEach(() => {
+  dataDir = mkdtempSync(join(tmpdir(), "research-workspace-store-"));
+  process.env.RESEARCH_WORKSPACE_DATA_DIR = dataDir;
+  __resetForTests();
+});
+
+afterEach(() => {
+  delete process.env.RESEARCH_WORKSPACE_DATA_DIR;
+  rmSync(dataDir, { recursive: true, force: true });
+});
 
 describe("research-workspace server store", () => {
   it("starts empty per workspace and validates the shared schema", () => {
@@ -115,5 +135,63 @@ describe("research-workspace server store", () => {
     });
     const titles = getState({ workspaceId: "ws-a" }).decisions.map((decision) => decision.title);
     expect(titles).toEqual(["Newer", "Older"]);
+  });
+});
+
+describe("research-workspace persistence", () => {
+  it("persists mutations and cold-loads them after a cache reset", () => {
+    upsertNode({
+      workspaceId: "ws-p",
+      node: { id: "n1", kind: "question", title: "Q", detail: "", status: "open" },
+    });
+    recordDecision({
+      workspaceId: "ws-p",
+      decision: { title: "D", rationale: "R", alternatives: [], agentId: null },
+    });
+
+    // Wipes the in-memory cache only - state must come back from disk.
+    __resetForTests();
+    const reloaded = getState({ workspaceId: "ws-p" });
+    expect(reloaded.nodes.map((node) => node.id)).toEqual(["n1"]);
+    expect(reloaded.decisions).toHaveLength(1);
+    // Other workspaces keep their own files.
+    expect(getState({ workspaceId: "ws-other" })).toEqual({ nodes: [], edges: [], decisions: [] });
+  });
+
+  it("degrades to a blank state on a corrupt file and recovers on the next write", () => {
+    upsertNode({
+      workspaceId: "ws-c",
+      node: { id: "n1", kind: "task", title: "T", detail: "", status: "open" },
+    });
+    writeFileSync(stateFilePathFor("ws-c"), "{not json", "utf8");
+
+    __resetForTests();
+    expect(getState({ workspaceId: "ws-c" })).toEqual({ nodes: [], edges: [], decisions: [] });
+
+    // The next mutation writes a valid file again.
+    recordDecision({
+      workspaceId: "ws-c",
+      decision: { title: "D", rationale: "", alternatives: [], agentId: null },
+    });
+    __resetForTests();
+    expect(getState({ workspaceId: "ws-c" }).decisions).toHaveLength(1);
+  });
+
+  it("round-trips node removal and edge cleanup across reloads", () => {
+    upsertNode({
+      workspaceId: "ws-r",
+      node: { id: "a", kind: "task", title: "A", detail: "", status: "open" },
+    });
+    upsertNode({
+      workspaceId: "ws-r",
+      node: { id: "b", kind: "task", title: "B", detail: "", status: "open" },
+    });
+    addEdge({ workspaceId: "ws-r", edge: { fromId: "a", toId: "b", kind: "depends_on" } });
+    removeNode({ workspaceId: "ws-r", nodeId: "a" });
+
+    __resetForTests();
+    const state = getState({ workspaceId: "ws-r" });
+    expect(state.nodes.map((node) => node.id)).toEqual(["b"]);
+    expect(state.edges).toEqual([]);
   });
 });
